@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Visor de Topología / Topology Viewer / Visionneuse de topologie</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root{
+    --navy:#1F3864;
+    --navy-light:#2E4E8C;
+    --ok:#4CA771;
+    --dup:#E8A33D;
+    --sup2:#D9704F;
+    --sup3:#C0432D;
+    --sup4:#8C1F18;
+    --multi-stripe:#5B4B8A;
+    --bg:#F5F6F8;
+    --panel:#FFFFFF;
+    --ink:#1B1E23;
+    --ink-soft:#5B6270;
+    --border:#E3E6EA;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:var(--ink);background:var(--bg);}
+
+  #app{display:flex;flex-direction:column;height:100vh;}
+
+  header{
+    background:var(--navy);
+    color:#fff;
+    padding:14px 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+    box-shadow:0 2px 8px rgba(0,0,0,0.15);
+    z-index:1000;
+  }
+  header .left{display:flex;align-items:center;gap:12px;}
+  header .title{display:flex;flex-direction:column;}
+  header h1{font-size:17px;margin:0;font-weight:600;letter-spacing:.2px;}
+  header .subtitle{font-size:12px;color:#B9C6E0;margin-top:2px;}
+  header .right{display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+  header .stats{display:flex;gap:18px;flex-wrap:wrap;}
+  header .stat{text-align:center;}
+  header .stat .num{font-size:19px;font-weight:700;line-height:1;}
+  header .stat .lbl{font-size:10px;color:#B9C6E0;text-transform:uppercase;letter-spacing:.4px;margin-top:2px;}
+
+  .lang-switch{display:flex;gap:4px;background:rgba(255,255,255,0.12);border-radius:8px;padding:3px;}
+  .lang-btn{
+    border:none;background:transparent;color:#C9D5EA;
+    padding:5px 10px;border-radius:6px;font-size:12px;font-weight:600;
+    cursor:pointer;letter-spacing:.3px;
+  }
+  .lang-btn.active{background:#fff;color:var(--navy);}
+
+  #main{flex:1;display:flex;min-height:0;}
+
+  #sidebar{
+    width:300px;
+    min-width:300px;
+    background:var(--panel);
+    border-right:1px solid var(--border);
+    display:flex;
+    flex-direction:column;
+    overflow-y:auto;
+  }
+  #sidebar .section{padding:16px 18px;border-bottom:1px solid var(--border);}
+  #sidebar h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-soft);margin:0 0 12px;}
+
+  .legend-item{
+    display:flex;align-items:center;gap:9px;
+    padding:6px 4px;border-radius:6px;cursor:pointer;
+    font-size:13px;user-select:none;
+  }
+  .legend-item:hover{background:var(--bg);}
+  .legend-swatch{width:15px;height:15px;border-radius:3px;flex:none;border:1px solid rgba(0,0,0,0.15);}
+  .legend-item input{margin:0;}
+  .legend-count{margin-left:auto;color:var(--ink-soft);font-size:12px;font-variant-numeric:tabular-nums;}
+
+  #info-panel{padding:16px 18px;}
+  #info-empty{color:var(--ink-soft);font-size:13px;line-height:1.5;}
+  .info-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--border);font-size:13px;}
+  .info-row:last-child{border-bottom:none;}
+  .info-row .k{color:var(--ink-soft);}
+  .info-row .v{font-weight:600;text-align:right;}
+  .badge{
+    display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;
+    margin:2px 4px 2px 0;color:#fff;
+  }
+
+  #map{flex:1;}
+
+  .leaflet-popup-content-wrapper{border-radius:8px;}
+  .leaflet-popup-content{font-size:13px;margin:12px 14px;}
+  .popup-title{font-weight:700;font-size:14px;margin-bottom:6px;color:var(--navy);}
+
+  footer{
+    background:var(--panel);
+    border-top:1px solid var(--border);
+    padding:8px 20px;
+    font-size:11px;
+    color:var(--ink-soft);
+    text-align:center;
+  }
+
+  @media (max-width:720px){
+    #sidebar{position:absolute;left:0;top:0;bottom:0;z-index:900;transform:translateX(-100%);transition:transform .2s;box-shadow:4px 0 16px rgba(0,0,0,.2);}
+    #sidebar.open{transform:translateX(0);}
+    #toggleSidebar{display:inline-flex !important;}
+    header .stats{display:none;}
+  }
+  #toggleSidebar{
+    display:none;
+    background:rgba(255,255,255,0.15);border:none;color:#fff;
+    width:34px;height:34px;border-radius:8px;font-size:18px;cursor:pointer;
+    align-items:center;justify-content:center;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="left">
+      <button id="toggleSidebar">☰</button>
+      <div class="title">
+        <h1 id="txt-title">Visor de Topología — Proyecto GEF 6</h1>
+        <div class="subtitle" id="txt-subtitle">Capa: All_polys_UTM18_topology · Diagnóstico de calidad geométrica</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="stats" id="headerStats"></div>
+      <div class="lang-switch">
+        <button class="lang-btn" data-lang="es">ES</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+        <button class="lang-btn" data-lang="fr">FR</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="main">
+    <aside id="sidebar">
+      <div class="section">
+        <h2 id="txt-filterTitle">Filtrar por tipo de error</h2>
+        <div id="legend"></div>
+      </div>
+      <div class="section" id="info-panel">
+        <h2 id="txt-infoTitle">Polígono seleccionado</h2>
+        <div id="info-empty">Haz clic sobre cualquier polígono del mapa para ver sus detalles aquí.</div>
+      </div>
+      <div class="section">
+        <h2 id="txt-howTitle">Cómo leer este mapa</h2>
+        <div id="txt-howText" style="font-size:12.5px;line-height:1.6;color:var(--ink-soft);"></div>
+      </div>
+    </aside>
+
+    <div id="map"></div>
+  </div>
+
+  <footer id="txt-footer">
+    Generado a partir del diagnóstico de topología de ArcGIS Pro · Datos: Errores_Topologia.geojson
+  </footer>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ============================================================
+// Diccionario de idiomas
+// ============================================================
+const I18N = {
+  es: {
+    htmlLang: "es",
+    title: "Visor de Topología — Proyecto GEF 6",
+    subtitle: "Capa: All_polys_UTM18_topology · Diagnóstico de calidad geométrica",
+    filterTitle: "Filtrar por tipo de error",
+    infoTitle: "Polígono seleccionado",
+    infoEmpty: "Haz clic sobre cualquier polígono del mapa para ver sus detalles aquí.",
+    howTitle: "Cómo leer este mapa",
+    howText: 'Cada color representa un tipo de problema encontrado en la capa original. Los polígonos <b style="color:var(--ok);">verdes</b> no tienen errores. Usa las casillas de la izquierda para mostrar u ocultar cada categoría, y haz clic sobre un polígono para ver su detalle.',
+    footer: "Generado a partir del diagnóstico de topología de ArcGIS Pro · Datos: Errores_Topologia.geojson",
+    statTotal: "Total",
+    statError: "Con error",
+    statOk: "OK",
+    fieldName: "Nombre",
+    fieldDup: "Duplicado",
+    fieldOverlap: "Superpuesto",
+    fieldLevel: "Nivel de superposición",
+    fieldMulti: "Multiparte",
+    yes: "Sí",
+    no: "No",
+    polygonFallback: "Polígono",
+    loadError: "No se pudieron cargar los datos.",
+    loadErrorHint: "Verifica que el archivo",
+    loadErrorHint2: "exista en el repositorio.",
+    catOK: "OK",
+    catDup: "DUPLICADO",
+    catOverlap: "SUPERPUESTO",
+    catMulti: "MULTIPARTE",
+  },
+  en: {
+    htmlLang: "en",
+    title: "Topology Viewer — GEF 6 Project",
+    subtitle: "Layer: All_polys_UTM18_topology · Geometric quality diagnostic",
+    filterTitle: "Filter by error type",
+    infoTitle: "Selected polygon",
+    infoEmpty: "Click on any polygon on the map to see its details here.",
+    howTitle: "How to read this map",
+    howText: 'Each color represents a type of issue found in the original layer. <b style="color:var(--ok);">Green</b> polygons have no errors. Use the checkboxes on the left to show or hide each category, and click a polygon to see its details.',
+    footer: "Generated from the ArcGIS Pro topology diagnostic · Data: Errores_Topologia.geojson",
+    statTotal: "Total",
+    statError: "With error",
+    statOk: "OK",
+    fieldName: "Name",
+    fieldDup: "Duplicate",
+    fieldOverlap: "Overlap",
+    fieldLevel: "Overlap level",
+    fieldMulti: "Multipart",
+    yes: "Yes",
+    no: "No",
+    polygonFallback: "Polygon",
+    loadError: "The data could not be loaded.",
+    loadErrorHint: "Check that the file",
+    loadErrorHint2: "exists in the repository.",
+    catOK: "OK",
+    catDup: "DUPLICATE",
+    catOverlap: "OVERLAP",
+    catMulti: "MULTIPART",
+  },
+  fr: {
+    htmlLang: "fr",
+    title: "Visionneuse de topologie — Projet GEF 6",
+    subtitle: "Couche : All_polys_UTM18_topology · Diagnostic de qualité géométrique",
+    filterTitle: "Filtrer par type d'erreur",
+    infoTitle: "Polygone sélectionné",
+    infoEmpty: "Cliquez sur un polygone de la carte pour voir ses détails ici.",
+    howTitle: "Comment lire cette carte",
+    howText: 'Chaque couleur représente un type de problème trouvé dans la couche d\'origine. Les polygones <b style="color:var(--ok);">verts</b> ne présentent aucune erreur. Utilisez les cases à gauche pour afficher ou masquer chaque catégorie, et cliquez sur un polygone pour voir son détail.',
+    footer: "Généré à partir du diagnostic de topologie d'ArcGIS Pro · Données : Errores_Topologia.geojson",
+    statTotal: "Total",
+    statError: "En erreur",
+    statOk: "OK",
+    fieldName: "Nom",
+    fieldDup: "Doublon",
+    fieldOverlap: "Chevauchement",
+    fieldLevel: "Niveau de chevauchement",
+    fieldMulti: "Multipartie",
+    yes: "Oui",
+    no: "Non",
+    polygonFallback: "Polygone",
+    loadError: "Les données n'ont pas pu être chargées.",
+    loadErrorHint: "Vérifiez que le fichier",
+    loadErrorHint2: "existe dans le dépôt.",
+    catOK: "OK",
+    catDup: "DUPLIQUÉ",
+    catOverlap: "CHEVAUCHEMENT",
+    catMulti: "MULTIPARTIE",
+  }
+};
+
+let currentLang = "es";
+
+function translateCategory(resumen, lang){
+  if(!resumen || resumen === "OK") return I18N[lang].catOK;
+  return resumen
+    .replaceAll("DUPLICADO", I18N[lang].catDup)
+    .replaceAll("SUPERPUESTO", I18N[lang].catOverlap)
+    .replaceAll("MULTIPART", I18N[lang].catMulti);
+}
+
+const COLORS = {
+  base_ok:      "#4CA771",
+  base_dup:     "#E8A33D",
+  base_sup2:    "#D9704F",
+  base_sup3:    "#C0432D",
+  base_sup4:    "#8C1F18",
+};
+
+function classify(resumen){
+  if(!resumen || resumen === "OK"){
+    return {key:"OK", color: COLORS.base_ok, isMulti: false};
+  }
+  let color;
+  if(resumen.includes("x4")) color = COLORS.base_sup4;
+  else if(resumen.includes("x3")) color = COLORS.base_sup3;
+  else if(resumen.includes("x2")) color = COLORS.base_sup2;
+  else if(resumen.includes("DUPLICADO")) color = COLORS.base_dup;
+  else color = "#5B6270";
+
+  return {key: resumen, color, isMulti: resumen.includes("MULTIPART")};
+}
+
+function styleFeature(feature){
+  const info = classify(feature.properties.RESUMEN_ERRORES);
+  return {
+    color: "#333",
+    weight: info.isMulti ? 1.8 : 0.8,
+    dashArray: info.isMulti ? "4,3" : null,
+    fillColor: info.color,
+    fillOpacity: 0.55,
+    opacity: 0.7
+  };
+}
+
+const map = L.map('map', {zoomControl:false}).setView([19.6, -71.9], 9);
+L.control.zoom({position:'bottomright'}).addTo(map);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors',
+  maxZoom: 19
+}).addTo(map);
+
+let geojsonLayer;
+let allFeaturesByCategory = {};
+let activeCategories = new Set();
+let lastCategoryCounts = {};
+let lastTotal = 0;
+let selectedProps = null;
+
+function fieldRow(k, v){
+  return `<div class="info-row"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+}
+
+function showInfo(props){
+  selectedProps = props;
+  renderInfoPanel();
+}
+
+function renderInfoPanel(){
+  const t = I18N[currentLang];
+  const panel = document.getElementById('info-panel');
+  if(!selectedProps){
+    panel.innerHTML = `<h2>${t.infoTitle}</h2><div id="info-empty">${t.infoEmpty}</div>`;
+    return;
+  }
+  const props = selectedProps;
+  const resumen = props.RESUMEN_ERRORES || "OK";
+  const info = classify(resumen);
+  const label = translateCategory(resumen, currentLang);
+  panel.innerHTML = `
+    <h2>${t.infoTitle}</h2>
+    <span class="badge" style="background:${info.color}">${label}</span>
+    ${fieldRow(t.fieldName, props.name || props.NOMBRE || "—")}
+    ${fieldRow(t.fieldDup, props.ERR_DUPLICADO ? t.yes : t.no)}
+    ${fieldRow(t.fieldOverlap, props.ERR_SUPERPUESTO ? t.yes : t.no)}
+    ${fieldRow(t.fieldLevel, props.NIVEL_SUPERPOS || 0)}
+    ${fieldRow(t.fieldMulti, props.ERR_MULTIPART ? t.yes : t.no)}
+  `;
+}
+
+function onEachFeature(feature, layer){
+  const props = feature.properties;
+  layer.on('click', () => showInfo(props));
+  layer.on('mouseover', () => layer.setStyle({weight:2.5, opacity:1}));
+  layer.on('mouseout', () => geojsonLayer.resetStyle(layer));
+  layer._rawProps = props;
+}
+
+function bindPopups(){
+  if(!geojsonLayer) return;
+  const t = I18N[currentLang];
+  geojsonLayer.eachLayer(layer => {
+    const props = layer._rawProps;
+    if(!props) return;
+    const resumen = props.RESUMEN_ERRORES || "OK";
+    const label = translateCategory(resumen, currentLang);
+    layer.unbindPopup();
+    layer.bindPopup(`
+      <div class="popup-title">${props.name || props.NOMBRE || t.polygonFallback}</div>
+      <div style="font-size:12px;color:#5B6270;">${label}</div>
+    `);
+  });
+}
+
+function buildLegend(categoryCounts){
+  const legend = document.getElementById('legend');
+  legend.innerHTML = "";
+  const sorted = Object.entries(categoryCounts).sort((a,b)=> b[1]-a[1]);
+
+  sorted.forEach(([cat, count]) => {
+    const info = classify(cat);
+    const label = translateCategory(cat, currentLang);
+    const id = "chk_" + btoa(unescape(encodeURIComponent(cat))).replace(/[^a-zA-Z0-9]/g,'');
+    const row = document.createElement('label');
+    row.className = "legend-item";
+    row.innerHTML = `
+      <input type="checkbox" id="${id}" ${activeCategories.has(cat) ? "checked" : ""} />
+      <span class="legend-swatch" style="background:${info.color}"></span>
+      <span>${label}</span>
+      <span class="legend-count">${count}</span>
+    `;
+    row.querySelector('input').addEventListener('change', (e) => {
+      if(e.target.checked) activeCategories.add(cat);
+      else activeCategories.delete(cat);
+      refreshLayer();
+    });
+    legend.appendChild(row);
+  });
+}
+
+function refreshLayer(){
+  if(geojsonLayer) map.removeLayer(geojsonLayer);
+  const filtered = {
+    type: "FeatureCollection",
+    features: Object.values(allFeaturesByCategory).flat().filter(f =>
+      activeCategories.has(f.properties.RESUMEN_ERRORES || "OK")
+    )
+  };
+  geojsonLayer = L.geoJSON(filtered, { style: styleFeature, onEachFeature }).addTo(map);
+  bindPopups();
+}
+
+function buildHeaderStats(total, errored){
+  const t = I18N[currentLang];
+  const ok = total - errored;
+  document.getElementById('headerStats').innerHTML = `
+    <div class="stat"><div class="num">${total}</div><div class="lbl">${t.statTotal}</div></div>
+    <div class="stat"><div class="num" style="color:#F2B880">${errored}</div><div class="lbl">${t.statError}</div></div>
+    <div class="stat"><div class="num" style="color:#9BE0B4">${ok}</div><div class="lbl">${t.statOk}</div></div>
+  `;
+}
+
+function applyLanguage(lang){
+  currentLang = lang;
+  const t = I18N[lang];
+  document.documentElement.lang = t.htmlLang;
+  document.getElementById('txt-title').textContent = t.title;
+  document.getElementById('txt-subtitle').textContent = t.subtitle;
+  document.getElementById('txt-filterTitle').textContent = t.filterTitle;
+  document.getElementById('txt-howTitle').textContent = t.howTitle;
+  document.getElementById('txt-howText').innerHTML = t.howText;
+  document.getElementById('txt-footer').textContent = t.footer;
+
+  document.querySelectorAll('.lang-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.lang === lang);
+  });
+
+  buildLegend(lastCategoryCounts);
+  renderInfoPanel();
+  buildHeaderStats(lastTotal, lastTotal - (lastCategoryCounts["OK"] || 0));
+  if(geojsonLayer) bindPopups();
+
+  localStorage.setItem('visor_lang', lang);
+}
+
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', () => applyLanguage(btn.dataset.lang));
+});
+
+fetch('data/errores_topologia.geojson')
+  .then(r => {
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  })
+  .then(data => {
+    const catCounts = {};
+    data.features.forEach(f => {
+      const cat = f.properties.RESUMEN_ERRORES || "OK";
+      catCounts[cat] = (catCounts[cat] || 0) + 1;
+      allFeaturesByCategory[cat] = allFeaturesByCategory[cat] || [];
+      allFeaturesByCategory[cat].push(f);
+      activeCategories.add(cat);
+    });
+
+    lastCategoryCounts = catCounts;
+    lastTotal = data.features.length;
+
+    refreshLayer();
+
+    const savedLang = localStorage.getItem('visor_lang') || "es";
+    applyLanguage(savedLang);
+
+    if(geojsonLayer.getBounds().isValid()){
+      map.fitBounds(geojsonLayer.getBounds(), {padding:[30,30]});
+    }
+  })
+  .catch(err => {
+    const t = I18N[currentLang];
+    document.getElementById('map').innerHTML =
+      `<div style="padding:40px;font-family:sans-serif;color:#8C1F18;">
+        <b>${t.loadError}</b><br/>
+        ${t.loadErrorHint} <code>data/errores_topologia.geojson</code> ${t.loadErrorHint2}<br/>
+        <small>${err.message}</small>
+      </div>`;
+  });
+
+document.getElementById('toggleSidebar').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('open');
+});
+
+applyLanguage(localStorage.getItem('visor_lang') || "es");
+</script>
+</body>
+</html>
