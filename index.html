@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Visor de Topología / Topology Viewer / Visionneuse de topologie</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root{
+    --navy:#1F3864;
+    --navy-light:#2E4E8C;
+    --ok:#3FA34D;
+    --dup:#E8A33D;
+    --sup2:#D9704F;
+    --sup3:#C0432D;
+    --sup4:#8C1F18;
+    --multi-stripe:#5B4B8A;
+    --bg:#F5F6F8;
+    --panel:#FFFFFF;
+    --ink:#1B1E23;
+    --ink-soft:#5B6270;
+    --border:#E3E6EA;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:var(--ink);background:var(--bg);}
+
+  #app{display:flex;flex-direction:column;height:100vh;}
+
+  header{
+    background:var(--navy);
+    color:#fff;
+    padding:14px 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+    box-shadow:0 2px 8px rgba(0,0,0,0.15);
+    z-index:1000;
+  }
+  header .left{display:flex;align-items:center;gap:12px;}
+  header .title{display:flex;flex-direction:column;}
+  header h1{font-size:20px;margin:0;font-weight:600;letter-spacing:.2px;}
+  header .subtitle{font-size:14px;color:#B9C6E0;margin-top:2px;}
+  header .right{display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+  header .stats{display:flex;gap:18px;flex-wrap:wrap;}
+  header .stat{text-align:center;}
+  header .stat .num{font-size:22px;font-weight:700;line-height:1;}
+  header .stat .lbl{font-size:11.5px;color:#B9C6E0;text-transform:uppercase;letter-spacing:.4px;margin-top:2px;}
+
+  .lang-switch{display:flex;gap:4px;background:rgba(255,255,255,0.12);border-radius:8px;padding:3px;}
+  .lang-btn{
+    border:none;background:transparent;color:#C9D5EA;
+    padding:6px 12px;border-radius:6px;font-size:14px;font-weight:600;
+    cursor:pointer;letter-spacing:.3px;
+  }
+  .lang-btn.active{background:#fff;color:var(--navy);}
+
+  .commune-tabs{
+    display:flex;
+    gap:4px;
+    background:var(--navy-light);
+    padding:10px 20px;
+    overflow-x:auto;
+    box-shadow:0 2px 6px rgba(0,0,0,0.12);
+    z-index:900;
+    flex:none;
+  }
+  .commune-tab{
+    border:none;
+    background:rgba(255,255,255,0.14);
+    color:#fff;
+    padding:10px 20px;
+    border-radius:8px 8px 0 0;
+    font-size:15px;
+    font-weight:700;
+    cursor:pointer;
+    white-space:nowrap;
+    transition:background .15s;
+  }
+  .commune-tab:hover{background:rgba(255,255,255,0.26);}
+  .commune-tab.active{
+    background:#fff;
+    color:var(--navy);
+  }
+  .commune-tab .tab-count{
+    font-weight:600;
+    opacity:.75;
+    margin-left:6px;
+    font-size:13px;
+  }
+  .commune-tab.active .tab-count{opacity:.55;}
+
+  #main{flex:1;display:flex;min-height:0;}
+
+  #sidebar{
+    width:340px;
+    min-width:340px;
+    background:var(--panel);
+    border-right:1px solid var(--border);
+    display:flex;
+    flex-direction:column;
+    overflow-y:auto;
+  }
+  #sidebar .section{padding:16px 18px;border-bottom:1px solid var(--border);}
+  #sidebar h2{font-size:14px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-soft);margin:0 0 12px;}
+
+  .legend-item{
+    display:flex;align-items:center;gap:9px;
+    padding:6px 4px;border-radius:6px;cursor:pointer;
+    font-size:15px;user-select:none;
+  }
+  .legend-item:hover{background:var(--bg);}
+  .legend-swatch{width:15px;height:15px;border-radius:3px;flex:none;border:1px solid rgba(0,0,0,0.15);}
+  .legend-item input{margin:0;}
+  .legend-count{margin-left:auto;color:var(--ink-soft);font-size:14px;font-variant-numeric:tabular-nums;}
+
+  #info-panel{padding:16px 18px;}
+  #info-empty{color:var(--ink-soft);font-size:15px;line-height:1.5;}
+  .info-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--border);font-size:15px;}
+  .info-row:last-child{border-bottom:none;}
+  .info-row .k{color:var(--ink-soft);}
+  .info-row .v{font-weight:600;text-align:right;}
+  .badge{
+    display:inline-block;padding:4px 11px;border-radius:20px;font-size:13px;font-weight:600;
+    margin:2px 4px 2px 0;color:#fff;
+  }
+
+  .commune-table{width:100%;border-collapse:collapse;font-size:14px;}
+  .commune-table th{
+    text-align:left;color:var(--ink-soft);font-weight:600;
+    padding:5px 4px;border-bottom:1px solid var(--border);
+    font-size:12px;text-transform:uppercase;letter-spacing:.3px;
+  }
+  .commune-table th.num, .commune-table td.num{text-align:right;}
+  .commune-table td{padding:6px 4px;border-bottom:1px dashed var(--border);}
+  .commune-table tr:last-child td{border-bottom:none;font-weight:700;border-top:1px solid var(--border);}
+  .commune-table .pct-bad{color:var(--sup3);font-weight:600;}
+  .commune-table .pct-ok{color:var(--ok);font-weight:600;}
+
+  .search-box{position:relative;}
+  #searchInput{
+    width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;
+    font-size:15px;font-family:inherit;color:var(--ink);outline:none;
+    box-sizing:border-box;
+  }
+  #searchInput:focus{border-color:var(--navy);}
+  .search-results{
+    position:absolute;top:calc(100% + 4px);left:0;right:0;
+    background:#fff;border:1px solid var(--border);border-radius:8px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.12);
+    max-height:260px;overflow-y:auto;
+    z-index:1200;display:none;
+  }
+  .search-results.open{display:block;}
+  .search-result-item{
+    padding:10px 12px;font-size:15px;cursor:pointer;
+    display:flex;justify-content:space-between;align-items:center;gap:8px;
+    border-bottom:1px solid var(--border);
+  }
+  .search-result-item:last-child{border-bottom:none;}
+  .search-result-item:hover{background:var(--bg);}
+  .search-result-item .srn{font-weight:600;}
+  .search-result-item .srd{font-size:12px;color:#fff;padding:2px 7px;border-radius:10px;white-space:nowrap;}
+  .search-empty{padding:12px;font-size:14.5px;color:var(--ink-soft);}
+
+  .dept-group{margin-bottom:12px;}
+  .dept-group:last-child{margin-bottom:0;}
+  .dept-group-label{
+    font-size:12px;text-transform:uppercase;letter-spacing:.4px;
+    color:var(--ink-soft);font-weight:600;margin-bottom:6px;
+  }
+  .dept-chips{display:flex;flex-wrap:wrap;gap:6px;}
+  .dept-chip{
+    border:1px solid var(--border);background:#fff;color:var(--ink);
+    padding:7px 13px;border-radius:20px;font-size:14px;font-weight:600;
+    cursor:pointer;white-space:nowrap;
+  }
+  .dept-chip:hover{background:var(--bg);}
+  .dept-chip.active{background:var(--navy);border-color:var(--navy);color:#fff;}
+  .dept-chip .chip-count{opacity:.75;font-weight:500;margin-left:3px;}
+
+  .dept-results-list{
+    margin-top:10px;max-height:220px;overflow-y:auto;
+    border:1px solid var(--border);border-radius:8px;
+    display:none;
+  }
+  .dept-results-list.open{display:block;}
+  .dept-results-list .dr-count{
+    padding:8px 12px;font-size:13px;color:var(--ink-soft);
+    border-bottom:1px solid var(--border);background:var(--bg);
+  }
+
+  #map{flex:1;}
+
+  .leaflet-popup-content-wrapper{border-radius:8px;}
+  .leaflet-popup-content{font-size:15px;margin:12px 14px;}
+  .popup-title{font-weight:700;font-size:16px;margin-bottom:6px;color:var(--navy);}
+
+  /* Controles personalizados del mapa (capa base + zoom a todos) */
+  .map-ctrl-panel{
+    background:#fff;
+    border-radius:10px;
+    box-shadow:0 2px 10px rgba(0,0,0,0.18);
+    overflow:hidden;
+    font-family:inherit;
+  }
+  .basemap-toggle{display:flex;}
+  .basemap-btn{
+    border:none;background:#fff;color:var(--ink-soft);
+    padding:9px 14px;font-size:14px;font-weight:600;cursor:pointer;
+    border-right:1px solid var(--border);
+    display:flex;align-items:center;gap:5px;
+  }
+  .basemap-btn:last-child{border-right:none;}
+  .basemap-btn.active{background:var(--navy);color:#fff;}
+  .basemap-btn:hover:not(.active){background:var(--bg);}
+
+  .fit-all-btn{
+    display:flex;align-items:center;justify-content:center;
+    width:100%;
+    border:none;background:#fff;color:var(--navy);
+    padding:9px 12px;font-size:14px;font-weight:600;cursor:pointer;
+    border-top:1px solid var(--border);
+    gap:6px;
+  }
+  .fit-all-btn:hover{background:var(--bg);}
+
+  footer{
+    background:var(--panel);
+    border-top:1px solid var(--border);
+    padding:8px 20px;
+    font-size:11px;
+    color:var(--ink-soft);
+    text-align:center;
+  }
+
+  @media (max-width:720px){
+    #sidebar{position:absolute;left:0;top:0;bottom:0;z-index:900;transform:translateX(-100%);transition:transform .2s;box-shadow:4px 0 16px rgba(0,0,0,.2);}
+    #sidebar.open{transform:translateX(0);}
+    #toggleSidebar{display:inline-flex !important;}
+    header .stats{display:none;}
+  }
+  #toggleSidebar{
+    display:none;
+    background:rgba(255,255,255,0.15);border:none;color:#fff;
+    width:34px;height:34px;border-radius:8px;font-size:18px;cursor:pointer;
+    align-items:center;justify-content:center;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="left">
+      <button id="toggleSidebar">☰</button>
+      <div class="title">
+        <h1 id="txt-title">Visor de Topología — Proyecto GEF 6</h1>
+        <div class="subtitle" id="txt-subtitle">Capa: All_polys_UTM18_topology · Diagnóstico de calidad geométrica</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="stats" id="headerStats"></div>
+      <div class="lang-switch">
+        <button class="lang-btn" data-lang="es">ES</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+      </div>
+    </div>
+  </header>
+
+  <nav id="communeTabs" class="commune-tabs"></nav>
+
+  <div id="main">
+    <aside id="sidebar">
+      <div class="section">
+        <h2 id="txt-filterTitle">Filtrar por tipo de error</h2>
+        <div id="legend"></div>
+        <label class="legend-item" style="margin-top:6px;border-top:1px solid var(--border);padding-top:10px;">
+          <input type="checkbox" id="chkBoundaries" checked />
+          <span class="legend-swatch" style="background:transparent;border:2px dashed var(--navy);"></span>
+          <span id="txt-boundariesLabel">Límites administrativos</span>
+        </label>
+      </div>
+      <div class="section" id="info-panel">
+        <h2 id="txt-infoTitle">Polígono seleccionado</h2>
+        <div id="info-empty">Haz clic sobre cualquier polígono del mapa para ver sus detalles aquí.</div>
+      </div>
+      <div class="section">
+        <h2 id="txt-communeTitle">Resumen por comuna</h2>
+        <table id="communeTable" class="commune-table"></table>
+      </div>
+      <div class="section">
+        <h2 id="txt-howTitle">Cómo leer este mapa</h2>
+        <div id="txt-howText" style="font-size:14.5px;line-height:1.6;color:var(--ink-soft);"></div>
+      </div>
+    </aside>
+
+    <div id="map"></div>
+  </div>
+
+  <footer id="txt-footer">
+    Generado a partir del diagnóstico de topología de ArcGIS Pro · Datos: Errores_Topologia.geojson
+  </footer>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ============================================================
+// Diccionario de idiomas
+// ============================================================
+const I18N = {
+  es: {
+    htmlLang: "es",
+    title: "Visor de Topología — Proyecto GEF 6",
+    subtitle: "Capa: All_polys_UTM18_topology · Diagnóstico de calidad geométrica",
+    filterTitle: "Filtrar por tipo de error",
+    infoTitle: "Polígono seleccionado",
+    infoEmpty: "Haz clic sobre cualquier polígono del mapa para ver sus detalles aquí.",
+    howTitle: "Cómo leer este mapa",
+    howText: 'Cada color representa un tipo de problema encontrado en la capa original. Los polígonos <b style="color:var(--ok);">verdes</b> no tienen errores. Usa las casillas de la izquierda para mostrar u ocultar cada categoría, y haz clic sobre un polígono para ver su detalle.',
+    footer: "Generado a partir del diagnóstico de topología de ArcGIS Pro · Datos: Errores_Topologia.geojson",
+    statTotal: "Total",
+    statError: "Con error",
+    statOk: "OK",
+    fieldName: "Nombre",
+    fieldDup: "Duplicado",
+    fieldOverlap: "Superpuesto",
+    fieldLevel: "Nivel de superposición",
+    fieldMulti: "Multiparte",
+    yes: "Sí",
+    no: "No",
+    polygonFallback: "Polígono",
+    loadError: "No se pudieron cargar los datos.",
+    loadErrorHint: "Verifica que el archivo",
+    loadErrorHint2: "exista en el repositorio.",
+    catOK: "OK",
+    catDup: "DUPLICADO",
+    catOverlap: "SUPERPUESTO",
+    catMulti: "MULTIPARTE",
+    baseStreets: "Calles",
+    baseSatellite: "Satélite",
+    fitAll: "Ver todos",
+    communeTitle: "Resumen por comuna",
+    colCommune: "Comuna",
+    colTotal: "Total",
+    colOk: "OK",
+    colError: "Con error",
+    boundariesLabel: "Límites administrativos",
+    boundaryPopup: "Comuna",
+    boundaryDept: "Departamento",
+    searchTitle: "Buscar polígono",
+    searchPlaceholder: "Escribe un nombre...",
+    searchEmpty: "Sin resultados",
+    searchCount: "resultados",
+    allCommunes: "Todas",
+    selectDept: "Selecciona un departamento",
+    selectCommune: "Selecciona una comuna",
+    polygonsFound: "polígonos encontrados",
+    grpOk: "OK (sin errores)",
+    grpDup: "Duplicado",
+    grpSup: "Superpuesto",
+    grpMulti: "Multiparte",
+    legendNote: "Un mismo polígono puede tener más de un error a la vez. Al hacer clic en un polígono en el mapa, verás su combinación exacta de errores.",
+  },
+  en: {
+    htmlLang: "en",
+    title: "Topology Viewer — GEF 6 Project",
+    subtitle: "Layer: All_polys_UTM18_topology · Geometric quality diagnostic",
+    filterTitle: "Filter by error type",
+    infoTitle: "Selected polygon",
+    infoEmpty: "Click on any polygon on the map to see its details here.",
+    howTitle: "How to read this map",
+    howText: 'Each color represents a type of issue found in the original layer. <b style="color:var(--ok);">Green</b> polygons have no errors. Use the checkboxes on the left to show or hide each category, and click a polygon to see its details.',
+    footer: "Generated from the ArcGIS Pro topology diagnostic · Data: Errores_Topologia.geojson",
+    statTotal: "Total",
+    statError: "With error",
+    statOk: "OK",
+    fieldName: "Name",
+    fieldDup: "Duplicate",
+    fieldOverlap: "Overlap",
+    fieldLevel: "Overlap level",
+    fieldMulti: "Multipart",
+    yes: "Yes",
+    no: "No",
+    polygonFallback: "Polygon",
+    loadError: "The data could not be loaded.",
+    loadErrorHint: "Check that the file",
+    loadErrorHint2: "exists in the repository.",
+    catOK: "OK",
+    catDup: "DUPLICATE",
+    catOverlap: "OVERLAP",
+    catMulti: "MULTIPART",
+    baseStreets: "Streets",
+    baseSatellite: "Satellite",
+    fitAll: "View all",
+    communeTitle: "Summary by commune",
+    colCommune: "Commune",
+    colTotal: "Total",
+    colOk: "OK",
+    colError: "With error",
+    boundariesLabel: "Administrative boundaries",
+    boundaryPopup: "Commune",
+    boundaryDept: "Department",
+    searchTitle: "Search polygon",
+    searchPlaceholder: "Type a name...",
+    searchEmpty: "No results",
+    searchCount: "results",
+    allCommunes: "All",
+    selectDept: "Select a department",
+    selectCommune: "Select a commune",
+    polygonsFound: "polygons found",
+    grpOk: "OK (no errors)",
+    grpDup: "Duplicate",
+    grpSup: "Overlap",
+    grpMulti: "Multipart",
+    legendNote: "A single polygon can have more than one error at once. Click any polygon on the map to see its exact combination of errors.",
+  },
+  fr: {
+    htmlLang: "fr",
+    title: "Visionneuse de topologie — Projet GEF 6",
+    subtitle: "Couche : All_polys_UTM18_topology · Diagnostic de qualité géométrique",
+    filterTitle: "Filtrer par type d'erreur",
+    infoTitle: "Polygone sélectionné",
+    infoEmpty: "Cliquez sur un polygone de la carte pour voir ses détails ici.",
+    howTitle: "Comment lire cette carte",
+    howText: 'Chaque couleur représente un type de problème trouvé dans la couche d\'origine. Les polygones <b style="color:var(--ok);">verts</b> ne présentent aucune erreur. Utilisez les cases à gauche pour afficher ou masquer chaque catégorie, et cliquez sur un polygone pour voir son détail.',
+    footer: "Généré à partir du diagnostic de topologie d'ArcGIS Pro · Données : Errores_Topologia.geojson",
+    statTotal: "Total",
+    statError: "En erreur",
+    statOk: "OK",
+    fieldName: "Nom",
+    fieldDup: "Doublon",
+    fieldOverlap: "Chevauchement",
+    fieldLevel: "Niveau de chevauchement",
+    fieldMulti: "Multipartie",
+    yes: "Oui",
+    no: "Non",
+    polygonFallback: "Polygone",
+    loadError: "Les données n'ont pas pu être chargées.",
+    loadErrorHint: "Vérifiez que le fichier",
+    loadErrorHint2: "existe dans le dépôt.",
+    catOK: "OK",
+    catDup: "DUPLIQUÉ",
+    catOverlap: "CHEVAUCHEMENT",
+    catMulti: "MULTIPARTIE",
+    baseStreets: "Rues",
+    baseSatellite: "Satellite",
+    fitAll: "Tout voir",
+    communeTitle: "Résumé par commune",
+    colCommune: "Commune",
+    colTotal: "Total",
+    colOk: "OK",
+    colError: "En erreur",
+    boundariesLabel: "Limites administratives",
+    boundaryPopup: "Commune",
+    boundaryDept: "Département",
+    searchTitle: "Rechercher un polygone",
+    searchPlaceholder: "Tapez un nom...",
+    searchEmpty: "Aucun résultat",
+    searchCount: "résultats",
+    allCommunes: "Toutes",
+    selectDept: "Sélectionnez un département",
+    selectCommune: "Sélectionnez une commune",
+    polygonsFound: "polygones trouvés",
+    grpOk: "OK (sans erreur)",
+    grpDup: "Dupliqué",
+    grpSup: "Chevauchement",
+    grpMulti: "Multipartie",
+    legendNote: "Un même polygone peut avoir plusieurs erreurs à la fois. Cliquez sur un polygone sur la carte pour voir sa combinaison exacte d'erreurs.",
+  }
+};
+
+let currentLang = "es";
+const AVAILABLE_LANGS = ["es", "en"];
+function safeLang(lang){
+  return AVAILABLE_LANGS.includes(lang) ? lang : "es";
+}
+
+function translateCategory(resumen, lang){
+  if(!resumen || resumen === "OK") return I18N[lang].catOK;
+  return resumen
+    .replaceAll("DUPLICADO", I18N[lang].catDup)
+    .replaceAll("SUPERPUESTO", I18N[lang].catOverlap)
+    .replaceAll("MULTIPART", I18N[lang].catMulti);
+}
+
+const COLORS = {
+  base_ok: "#3FA34D",
+};
+
+// Paleta de 16 colores muy distinguibles entre sí (uno por cada combinación exacta de errores)
+const CATEGORY_PALETTE = [
+  "#6C5CE7", "#E67E22", "#2E86DE", "#E84393", "#C0392B",
+  "#16A085", "#8E44AD", "#F1C40F", "#D35400", "#2980B9",
+  "#EE5A6F", "#27AE60", "#A93226", "#5F27CD", "#FF9F43", "#0F4C81"
+];
+
+let categoryColorMap = {}; // se llena al cargar los datos: { "DUPLICADO; SUPERPUESTO(x2)": "#..." , ... }
+
+function buildCategoryColorMap(catCounts){
+  categoryColorMap = {};
+  const cats = Object.keys(catCounts).filter(c => c !== "OK").sort((a,b) => catCounts[b] - catCounts[a]);
+  cats.forEach((cat, i) => {
+    categoryColorMap[cat] = CATEGORY_PALETTE[i % CATEGORY_PALETTE.length];
+  });
+}
+
+function classify(resumen){
+  if(!resumen || resumen === "OK"){
+    return {key:"OK", color: COLORS.base_ok, isMulti: false};
+  }
+  const color = categoryColorMap[resumen] || "#5B6270";
+  return {key: resumen, color, isMulti: resumen.includes("MULTIPART")};
+}
+
+function styleFeature(feature){
+  const info = classify(feature.properties.RESUMEN_ERRORES);
+  return {
+    color: "#333",
+    weight: info.isMulti ? 1.8 : 0.8,
+    dashArray: info.isMulti ? "4,3" : null,
+    fillColor: info.color,
+    fillOpacity: 0.55,
+    opacity: 0.7
+  };
+}
+
+const map = L.map('map', {zoomControl:false}).setView([19.6, -71.9], 9);
+L.control.zoom({position:'bottomright'}).addTo(map);
+
+// ---------- Capas base (Calles / Satélite) ----------
+// OpenStreetMap estándar: es el ejemplo oficial de la documentación de Leaflet,
+// 100% gratuito, sin API key, y el servicio de mapas base más usado y estable que existe.
+const baseStreets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  maxZoom: 21,
+  maxNativeZoom: 19
+});
+const baseStreetsLabels = L.layerGroup(); // OSM ya incluye sus propias etiquetas, no hace falta capa aparte
+
+const baseSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics',
+  maxZoom: 21,
+  maxNativeZoom: 19
+});
+
+const baseLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 21,
+  maxNativeZoom: 19,
+  pane: 'shadowPane'
+});
+
+baseStreets.addTo(map);
+baseStreetsLabels.addTo(map);
+let currentBase = "streets";
+
+// ---------- Control personalizado: capa base + zoom a todos ----------
+const MapControls = L.Control.extend({
+  options: { position: 'topright' },
+  onAdd: function(){
+    const container = L.DomUtil.create('div', 'map-ctrl-panel');
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+
+    const toggleRow = L.DomUtil.create('div', 'basemap-toggle', container);
+    const btnStreets = L.DomUtil.create('button', 'basemap-btn active', toggleRow);
+    btnStreets.id = 'btnBaseStreets';
+    btnStreets.innerHTML = '🗺️ <span></span>';
+    const btnSat = L.DomUtil.create('button', 'basemap-btn', toggleRow);
+    btnSat.id = 'btnBaseSat';
+    btnSat.innerHTML = '🛰️ <span></span>';
+
+    const fitBtn = L.DomUtil.create('button', 'fit-all-btn', container);
+    fitBtn.id = 'btnFitAll';
+    fitBtn.innerHTML = '⤢ <span></span>';
+
+    L.DomEvent.on(btnStreets, 'click', () => setBasemap('streets'));
+    L.DomEvent.on(btnSat, 'click', () => setBasemap('satellite'));
+    L.DomEvent.on(fitBtn, 'click', () => {
+      if(geojsonLayer && geojsonLayer.getBounds().isValid()){
+        map.fitBounds(geojsonLayer.getBounds(), {padding:[30,30]});
+      }
+    });
+
+    return container;
+  }
+});
+map.addControl(new MapControls());
+
+function setBasemap(which){
+  currentBase = which;
+  if(which === "satellite"){
+    map.removeLayer(baseStreets);
+    map.removeLayer(baseStreetsLabels);
+    baseSatellite.addTo(map);
+    baseLabels.addTo(map);
+  } else {
+    map.removeLayer(baseSatellite);
+    map.removeLayer(baseLabels);
+    baseStreets.addTo(map);
+    baseStreetsLabels.addTo(map);
+  }
+  document.getElementById('btnBaseStreets').classList.toggle('active', which === "streets");
+  document.getElementById('btnBaseSat').classList.toggle('active', which === "satellite");
+}
+
+function refreshMapControlLabels(){
+  const t = I18N[currentLang];
+  const s1 = document.querySelector('#btnBaseStreets span');
+  const s2 = document.querySelector('#btnBaseSat span');
+  const s3 = document.querySelector('#btnFitAll span');
+  if(s1) s1.textContent = t.baseStreets;
+  if(s2) s2.textContent = t.baseSatellite;
+  if(s3) s3.textContent = t.fitAll;
+}
+
+let geojsonLayer;
+let boundariesLayer;
+let allFeaturesByCategory = {};
+let lastCategoryCounts = {};
+let lastTotal = 0;
+let selectedProps = null;
+
+// ---------- Capa de límites administrativos (Limites_admin) ----------
+function boundaryStyle(){
+  return {
+    color: "#1F3864",
+    weight: 1.8,
+    dashArray: "6,4",
+    fillOpacity: 0,
+    opacity: 0.85
+  };
+}
+
+function onEachBoundary(feature, layer){
+  const props = feature.properties || {};
+  const comuna = props.adm2_name1 || props.adm2_name || "—";
+  const depto = props.adm1_name1 || props.adm1_name || "—";
+  layer._boundaryProps = { comuna, depto };
+}
+
+function bindBoundaryTooltips(){
+  if(!boundariesLayer) return;
+  const t = I18N[currentLang];
+  boundariesLayer.eachLayer(layer => {
+    const p = layer._boundaryProps;
+    if(!p) return;
+    layer.unbindTooltip();
+    layer.bindTooltip(`<b>${t.boundaryPopup}:</b> ${p.comuna}<br/><b>${t.boundaryDept}:</b> ${p.depto}`, {sticky: true});
+  });
+}
+
+fetch('data/limites_admin.geojson')
+  .then(r => r.ok ? r.json() : null)
+  .then(data => {
+    if(!data) return;
+    boundariesLayer = L.geoJSON(data, { style: boundaryStyle, onEachFeature: onEachBoundary }).addTo(map);
+    bindBoundaryTooltips();
+  })
+  .catch(() => { /* capa opcional: si no existe el archivo, el mapa sigue funcionando sin ella */ });
+
+document.getElementById('chkBoundaries').addEventListener('change', (e) => {
+  if(!boundariesLayer) return;
+  if(e.target.checked) boundariesLayer.addTo(map);
+  else map.removeLayer(boundariesLayer);
+});
+
+function fieldRow(k, v){
+  return `<div class="info-row"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+}
+
+function showInfo(props){
+  selectedProps = props;
+  renderInfoPanel();
+}
+
+function renderInfoPanel(){
+  const t = I18N[currentLang];
+  const panel = document.getElementById('info-panel');
+  if(!selectedProps){
+    panel.innerHTML = `<h2>${t.infoTitle}</h2><div id="info-empty">${t.infoEmpty}</div>`;
+    return;
+  }
+  const props = selectedProps;
+  const resumen = props.RESUMEN_ERRORES || "OK";
+  const info = classify(resumen);
+  const label = translateCategory(resumen, currentLang);
+  panel.innerHTML = `
+    <h2>${t.infoTitle}</h2>
+    <span class="badge" style="background:${info.color}">${label}</span>
+    ${fieldRow(t.fieldName, props.name || props.NOMBRE || "—")}
+    ${fieldRow(t.fieldDup, props.ERR_DUPLICADO ? t.yes : t.no)}
+    ${fieldRow(t.fieldOverlap, props.ERR_SUPERPUESTO ? t.yes : t.no)}
+    ${fieldRow(t.fieldLevel, props.NIVEL_SUPERPOS || 0)}
+    ${fieldRow(t.fieldMulti, props.ERR_MULTIPART ? t.yes : t.no)}
+  `;
+}
+
+function onEachFeature(feature, layer){
+  const props = feature.properties;
+  layer.on('click', () => showInfo(props));
+  layer.on('mouseover', () => layer.setStyle({weight:2.5, opacity:1}));
+  layer.on('mouseout', () => geojsonLayer.resetStyle(layer));
+  layer._rawProps = props;
+}
+
+function bindPopups(){
+  if(!geojsonLayer) return;
+  const t = I18N[currentLang];
+  geojsonLayer.eachLayer(layer => {
+    const props = layer._rawProps;
+    if(!props) return;
+    const resumen = props.RESUMEN_ERRORES || "OK";
+    const label = translateCategory(resumen, currentLang);
+    layer.unbindPopup();
+    layer.bindPopup(`
+      <div class="popup-title">${props.name || props.NOMBRE || t.polygonFallback}</div>
+      <div style="font-size:14px;color:#5B6270;">${label}</div>
+    `);
+  });
+}
+
+let activeGroups = { ok: true, dup: true, sup: true, multi: true };
+
+function buildLegend(categoryCounts){
+  const t = I18N[currentLang];
+  const legend = document.getElementById('legend');
+  legend.innerHTML = "";
+
+  // Contar por grupo general (un mismo polígono puede contar en varios grupos a la vez)
+  const groupCounts = { ok: 0, dup: 0, sup: 0, multi: 0 };
+  Object.values(allFeaturesByCategory).flat().forEach(f => {
+    const p = f.properties;
+    const resumen = p.RESUMEN_ERRORES || "OK";
+    if(resumen === "OK") groupCounts.ok++;
+    if(p.ERR_DUPLICADO) groupCounts.dup++;
+    if(p.ERR_SUPERPUESTO) groupCounts.sup++;
+    if(p.ERR_MULTIPART) groupCounts.multi++;
+  });
+
+  const groups = [
+    { key: "ok",    label: t.grpOk,    color: COLORS.base_ok, count: groupCounts.ok },
+    { key: "dup",   label: t.grpDup,   color: "#6C5CE7",      count: groupCounts.dup },
+    { key: "sup",   label: t.grpSup,   color: "#E67E22",      count: groupCounts.sup },
+    { key: "multi", label: t.grpMulti, color: "#5B6270",      count: groupCounts.multi },
+  ];
+
+  groups.forEach(g => {
+    const row = document.createElement('label');
+    row.className = "legend-item";
+    row.innerHTML = `
+      <input type="checkbox" id="chk_grp_${g.key}" ${activeGroups[g.key] ? "checked" : ""} />
+      <span class="legend-swatch" style="background:${g.color}"></span>
+      <span>${g.label}</span>
+      <span class="legend-count">${g.count}</span>
+    `;
+    row.querySelector('input').addEventListener('change', (e) => {
+      activeGroups[g.key] = e.target.checked;
+      refreshLayer();
+    });
+    legend.appendChild(row);
+  });
+
+  const note = document.createElement('div');
+  note.id = "txt-legendNote";
+  note.style.cssText = "font-size:13px;color:var(--ink-soft);margin-top:8px;line-height:1.4;";
+  note.textContent = t.legendNote;
+  legend.appendChild(note);
+}
+
+function featureMatchesActiveGroups(props){
+  if(activeCommuneTab !== null){
+    const commune = props.adm_name || props.ADM_NAME || "—";
+    if(commune !== activeCommuneTab) return false;
+  }
+  const resumen = props.RESUMEN_ERRORES || "OK";
+  if(resumen === "OK") return activeGroups.ok;
+  return (activeGroups.dup && !!props.ERR_DUPLICADO)
+      || (activeGroups.sup && !!props.ERR_SUPERPUESTO)
+      || (activeGroups.multi && !!props.ERR_MULTIPART);
+}
+
+function refreshLayer(){
+  if(geojsonLayer) map.removeLayer(geojsonLayer);
+  const filtered = {
+    type: "FeatureCollection",
+    features: Object.values(allFeaturesByCategory).flat().filter(f => featureMatchesActiveGroups(f.properties))
+  };
+  geojsonLayer = L.geoJSON(filtered, { style: styleFeature, onEachFeature }).addTo(map);
+  bindPopups();
+}
+
+function buildHeaderStats(total, errored){
+  const t = I18N[currentLang];
+  const ok = total - errored;
+  document.getElementById('headerStats').innerHTML = `
+    <div class="stat"><div class="num">${total}</div><div class="lbl">${t.statTotal}</div></div>
+    <div class="stat"><div class="num" style="color:#F2B880">${errored}</div><div class="lbl">${t.statError}</div></div>
+    <div class="stat"><div class="num" style="color:#9BE0B4">${ok}</div><div class="lbl">${t.statOk}</div></div>
+  `;
+}
+
+let lastCommuneStats = null;
+
+function computeCommuneStats(){
+  const stats = {};
+  Object.values(allFeaturesByCategory).flat().forEach(f => {
+    const adm = f.properties.adm_name || f.properties.ADM_NAME || "—";
+    const resumen = f.properties.RESUMEN_ERRORES || "OK";
+    if(!stats[adm]) stats[adm] = { total: 0, ok: 0, error: 0 };
+    stats[adm].total++;
+    if(resumen === "OK") stats[adm].ok++;
+    else stats[adm].error++;
+  });
+  return stats;
+}
+
+// ============================================================
+// Buscador de polígonos
+// ============================================================
+let searchIndex = []; // [{ name, resumen, color, bounds: L.LatLngBounds, center, props }]
+
+function extractCoords(geometry, acc){
+  if(!geometry) return;
+  if(geometry.type === "Polygon"){
+    geometry.coordinates.forEach(ring => ring.forEach(([lng,lat]) => acc.push([lat,lng])));
+  } else if(geometry.type === "MultiPolygon"){
+    geometry.coordinates.forEach(poly => poly.forEach(ring => ring.forEach(([lng,lat]) => acc.push([lat,lng]))));
+  }
+}
+
+function buildSearchIndex(){
+  searchIndex = [];
+  Object.values(allFeaturesByCategory).flat().forEach(f => {
+    const name = f.properties.name || f.properties.NOMBRE || "";
+    if(!name || !name.trim()) return;
+    const coords = [];
+    extractCoords(f.geometry, coords);
+    if(coords.length === 0) return;
+    const bounds = L.latLngBounds(coords);
+    searchIndex.push({
+      name,
+      nameLower: name.toLowerCase(),
+      resumen: f.properties.RESUMEN_ERRORES || "OK",
+      bounds,
+      center: bounds.getCenter(),
+      props: f.properties
+    });
+  });
+}
+
+function renderSearchResults(query){
+  const t = I18N[currentLang];
+  const box = document.getElementById('searchResults');
+  if(!query || query.trim().length < 1){
+    box.classList.remove('open');
+    box.innerHTML = "";
+    return;
+  }
+  const q = query.trim().toLowerCase();
+  const matches = searchIndex.filter(item => item.nameLower.includes(q)).slice(0, 25);
+
+  if(matches.length === 0){
+    box.innerHTML = `<div class="search-empty">${t.searchEmpty}</div>`;
+    box.classList.add('open');
+    return;
+  }
+
+  box.innerHTML = matches.map((item, i) => {
+    const info = classify(item.resumen);
+    const label = translateCategory(item.resumen, currentLang);
+    return `<div class="search-result-item" data-idx="${searchIndex.indexOf(item)}">
+      <span class="srn">${item.name}</span>
+      <span class="srd" style="background:${info.color}">${label}</span>
+    </div>`;
+  }).join("");
+  box.classList.add('open');
+
+  box.querySelectorAll('.search-result-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.idx, 10);
+      goToSearchResult(searchIndex[idx]);
+    });
+  });
+}
+
+function goToSearchResult(item){
+  if(!item) return;
+  map.fitBounds(item.bounds, {padding:[60,60], maxZoom:20});
+  showInfo(item.props);
+}
+
+
+// ============================================================
+// Pestañas de comuna (filtrado + zoom, en la parte superior)
+// ============================================================
+let communeIndex = {}; // { nombreComuna: { items: [searchIndex items], bounds: L.LatLngBounds } }
+let activeCommuneTab = null; // null = todas las comunas
+
+function buildCommuneIndex(){
+  communeIndex = {};
+  searchIndex.forEach(item => {
+    const commune = item.props.adm_name || item.props.ADM_NAME || "—";
+    if(!communeIndex[commune]) communeIndex[commune] = { items: [], bounds: null };
+    communeIndex[commune].items.push(item);
+    communeIndex[commune].bounds = communeIndex[commune].bounds
+      ? communeIndex[commune].bounds.extend(item.bounds)
+      : L.latLngBounds(item.bounds.getSouthWest(), item.bounds.getNorthEast());
+  });
+}
+
+// Nombres bonitos para mostrar (los datos vienen con guiones/guiones bajos)
+function prettyCommuneName(raw){
+  return raw
+    .replace(/_/g, ' ')
+    .split(/[\s-]+/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(raw.includes('-') ? '-' : ' ');
+}
+
+function renderCommuneTabs(){
+  const t = I18N[currentLang];
+  const container = document.getElementById('communeTabs');
+  container.innerHTML = "";
+
+  const allTab = document.createElement('button');
+  allTab.className = 'commune-tab' + (activeCommuneTab === null ? ' active' : '');
+  allTab.innerHTML = `${t.allCommunes} <span class="tab-count">${lastTotal}</span>`;
+  allTab.addEventListener('click', () => selectCommuneTab(null));
+  container.appendChild(allTab);
+
+  Object.keys(communeIndex).sort().forEach(commune => {
+    const items = communeIndex[commune].items;
+    const tab = document.createElement('button');
+    tab.className = 'commune-tab' + (activeCommuneTab === commune ? ' active' : '');
+    tab.dataset.commune = commune;
+    tab.innerHTML = `${prettyCommuneName(commune)} <span class="tab-count">${items.length}</span>`;
+    tab.addEventListener('click', () => selectCommuneTab(commune));
+    container.appendChild(tab);
+  });
+}
+
+function selectCommuneTab(commune){
+  activeCommuneTab = commune;
+  renderCommuneTabs();
+  refreshLayer();
+
+  if(commune === null){
+    const allBounds = communeBoundsOfAll();
+    if(allBounds && allBounds.isValid()) map.fitBounds(allBounds, {padding:[30,30]});
+  } else if(communeIndex[commune] && communeIndex[commune].bounds){
+    map.fitBounds(communeIndex[commune].bounds, {padding:[40,40], maxZoom: 19});
+  }
+}
+
+function communeBoundsOfAll(){
+  let b = null;
+  Object.values(communeIndex).forEach(c => {
+    if(!c.bounds) return;
+    b = b ? b.extend(c.bounds) : L.latLngBounds(c.bounds.getSouthWest(), c.bounds.getNorthEast());
+  });
+  return b;
+}
+
+function buildCommuneTable(){
+  const t = I18N[currentLang];
+  if(!lastCommuneStats) return;
+  const rows = Object.entries(lastCommuneStats).sort((a,b) => b[1].total - a[1].total);
+  let totalAll = 0, okAll = 0, errAll = 0;
+
+  let html = `<tr>
+    <th>${t.colCommune}</th>
+    <th class="num">${t.colTotal}</th>
+    <th class="num">${t.colOk}</th>
+    <th class="num">${t.colError}</th>
+  </tr>`;
+
+  rows.forEach(([commune, s]) => {
+    totalAll += s.total; okAll += s.ok; errAll += s.error;
+    const pct = s.total ? Math.round(s.error / s.total * 100) : 0;
+    const pctClass = pct >= 50 ? "pct-bad" : "pct-ok";
+    html += `<tr>
+      <td>${commune}</td>
+      <td class="num">${s.total}</td>
+      <td class="num">${s.ok}</td>
+      <td class="num ${pctClass}">${s.error} (${pct}%)</td>
+    </tr>`;
+  });
+
+  const pctAll = totalAll ? Math.round(errAll / totalAll * 100) : 0;
+  html += `<tr>
+    <td>${t.statTotal}</td>
+    <td class="num">${totalAll}</td>
+    <td class="num">${okAll}</td>
+    <td class="num">${errAll} (${pctAll}%)</td>
+  </tr>`;
+
+  document.getElementById('communeTable').innerHTML = html;
+}
+
+function applyLanguage(lang){
+  currentLang = lang;
+  const t = I18N[lang];
+  document.documentElement.lang = t.htmlLang;
+  document.getElementById('txt-title').textContent = t.title;
+  document.getElementById('txt-subtitle').textContent = t.subtitle;
+  document.getElementById('txt-filterTitle').textContent = t.filterTitle;
+  document.getElementById('txt-boundariesLabel').textContent = t.boundariesLabel;
+  document.getElementById('txt-communeTitle').textContent = t.communeTitle;
+  document.getElementById('txt-howTitle').textContent = t.howTitle;
+  document.getElementById('txt-howText').innerHTML = t.howText;
+  document.getElementById('txt-footer').textContent = t.footer;
+
+  document.querySelectorAll('.lang-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.lang === lang);
+  });
+
+  buildLegend(lastCategoryCounts);
+  renderInfoPanel();
+  buildHeaderStats(lastTotal, lastTotal - (lastCategoryCounts["OK"] || 0));
+  buildCommuneTable();
+  if(geojsonLayer) bindPopups();
+  bindBoundaryTooltips();
+  if(Object.keys(communeIndex).length) renderCommuneTabs();
+
+  refreshMapControlLabels();
+  localStorage.setItem('visor_lang', lang);
+}
+
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', () => applyLanguage(btn.dataset.lang));
+});
+
+fetch('data/errores_topologia.geojson')
+  .then(r => {
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  })
+  .then(data => {
+    const catCounts = {};
+    data.features.forEach(f => {
+      const cat = f.properties.RESUMEN_ERRORES || "OK";
+      catCounts[cat] = (catCounts[cat] || 0) + 1;
+      allFeaturesByCategory[cat] = allFeaturesByCategory[cat] || [];
+      allFeaturesByCategory[cat].push(f);
+    });
+
+    lastCategoryCounts = catCounts;
+    lastTotal = data.features.length;
+    buildCategoryColorMap(catCounts);
+    lastCommuneStats = computeCommuneStats();
+    buildSearchIndex();
+    buildCommuneIndex();
+    renderCommuneTabs();
+
+    refreshLayer();
+
+    const savedLang = safeLang(localStorage.getItem('visor_lang'));
+    applyLanguage(savedLang);
+
+    if(geojsonLayer.getBounds().isValid()){
+      map.fitBounds(geojsonLayer.getBounds(), {padding:[30,30]});
+    }
+  })
+  .catch(err => {
+    const t = I18N[currentLang];
+    document.getElementById('map').innerHTML =
+      `<div style="padding:40px;font-family:sans-serif;color:#8C1F18;">
+        <b>${t.loadError}</b><br/>
+        ${t.loadErrorHint} <code>data/errores_topologia.geojson</code> ${t.loadErrorHint2}<br/>
+        <small>${err.message}</small>
+      </div>`;
+  });
+
+document.getElementById('toggleSidebar').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('open');
+});
+
+applyLanguage(safeLang(localStorage.getItem('visor_lang')));
+</script>
+</body>
+</html>
