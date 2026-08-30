@@ -1,4 +1,4 @@
-# 🌾 Fincas GEF-6 — Visor de Calidad Geoespacial
+# 🌾 Visor con los polígonos correspondientes a Fincas identificadas en campo para el GEF-6 
 
 **Mapa interactivo para que cualquier persona, sin conocimientos de GIS, entienda de un vistazo el estado real de los polígonos del proyecto GEF-6 en Mont-Organisé, Haití — y ayude a tomar mejores decisiones.**
 
