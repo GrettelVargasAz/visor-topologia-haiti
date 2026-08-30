@@ -91,3 +91,4 @@ Y abre `http://localhost:8000` (no `file://`).
 ---
 
 **Desarrollado por Grettel Vargas** · Proyecto GEF-6, Haití
+
